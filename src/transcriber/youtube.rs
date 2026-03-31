@@ -128,8 +128,11 @@ impl YouTubeTranscriptFetcher {
 
         // Select best caption track
         let lang = preferred_language.unwrap_or("en");
-        let (track_url, track_lang, is_asr) = select_caption_track(caption_tracks, lang)
+        let (raw_track_url, track_lang, is_asr) = select_caption_track(caption_tracks, lang)
             .context("No suitable caption track found")?;
+
+        // Strip fmt=srv3 to get simple <text> XML format instead of <p>/<s> format
+        let track_url = raw_track_url.replace("&fmt=srv3", "");
 
         info!(
             "Found {} captions (language: {})",
