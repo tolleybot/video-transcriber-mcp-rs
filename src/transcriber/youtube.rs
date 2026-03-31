@@ -10,6 +10,9 @@ static VIDEO_ID_RE: LazyLock<Regex> = LazyLock::new(|| {
         .unwrap()
 });
 
+static INNERTUBE_API_KEY_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#""INNERTUBE_API_KEY":\s*"([a-zA-Z0-9_-]+)""#).unwrap());
+
 pub struct YouTubeTranscriptFetcher {
     client: reqwest::Client,
 }
@@ -41,14 +44,14 @@ impl YouTubeTranscriptFetcher {
         video_id: &str,
         preferred_language: Option<&str>,
     ) -> Result<YouTubeTranscriptResult> {
-        let url = format!("https://www.youtube.com/watch?v={}", video_id);
+        let watch_url = format!("https://www.youtube.com/watch?v={}", video_id);
 
-        info!("Fetching YouTube page for captions...");
+        // Step 1: Fetch the watch page to extract the InnerTube API key
+        info!("Fetching YouTube page to extract API key...");
         let html = self
             .client
-            .get(&url)
-            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-            .header("Accept-Language", "en-US,en;q=0.9")
+            .get(&watch_url)
+            .header("Accept-Language", "en-US")
             .send()
             .await
             .context("Failed to fetch YouTube page")?
@@ -58,8 +61,36 @@ impl YouTubeTranscriptFetcher {
             .await
             .context("Failed to read YouTube page body")?;
 
-        let player_response = extract_player_response(&html)
-            .context("Could not find ytInitialPlayerResponse in page")?;
+        let api_key = INNERTUBE_API_KEY_RE
+            .captures(&html)
+            .map(|caps| caps[1].to_string())
+            .context("Could not find INNERTUBE_API_KEY in YouTube page")?;
+
+        // Step 2: Call the InnerTube player API (as Android client to avoid bot detection)
+        info!("Calling InnerTube API for video data...");
+        let innertube_url = format!("https://www.youtube.com/youtubei/v1/player?key={}", api_key);
+        let innertube_body = serde_json::json!({
+            "context": {
+                "client": {
+                    "clientName": "ANDROID",
+                    "clientVersion": "20.10.38"
+                }
+            },
+            "videoId": video_id
+        });
+
+        let player_response: serde_json::Value = self
+            .client
+            .post(&innertube_url)
+            .json(&innertube_body)
+            .send()
+            .await
+            .context("Failed to call InnerTube API")?
+            .error_for_status()
+            .context("InnerTube API returned an error status")?
+            .json()
+            .await
+            .context("Failed to parse InnerTube API response")?;
 
         // Extract metadata from videoDetails
         let video_details = &player_response["videoDetails"];
@@ -82,7 +113,7 @@ impl YouTubeTranscriptFetcher {
                 .unwrap_or("")
                 .to_string(),
             platform: "YouTube".to_string(),
-            url: url.clone(),
+            url: watch_url,
         };
 
         // Extract caption tracks
@@ -106,7 +137,7 @@ impl YouTubeTranscriptFetcher {
             track_lang
         );
 
-        // Fetch and parse the caption XML
+        // Step 3: Fetch and parse the caption XML
         let caption_xml = self
             .client
             .get(&track_url)
@@ -137,47 +168,6 @@ impl YouTubeTranscriptFetcher {
 /// Extract video ID from a YouTube URL. Returns None for non-YouTube URLs.
 pub fn extract_youtube_video_id(url: &str) -> Option<String> {
     VIDEO_ID_RE.captures(url).map(|caps| caps[1].to_string())
-}
-
-/// Parse the ytInitialPlayerResponse JSON from the YouTube page HTML.
-fn extract_player_response(html: &str) -> Option<serde_json::Value> {
-    let marker = "ytInitialPlayerResponse";
-    let start_idx = html.find(marker)?;
-    let after_marker = &html[start_idx + marker.len()..];
-    let json_start = after_marker.find('{')?;
-    let json_str = &after_marker[json_start..];
-
-    // Brace-counting to find the matching closing brace
-    let mut depth = 0i32;
-    let mut end = 0;
-    let mut in_string = false;
-    let mut escape_next = false;
-
-    for (i, ch) in json_str.char_indices() {
-        if escape_next {
-            escape_next = false;
-            continue;
-        }
-        match ch {
-            '\\' if in_string => escape_next = true,
-            '"' => in_string = !in_string,
-            '{' if !in_string => depth += 1,
-            '}' if !in_string => {
-                depth -= 1;
-                if depth == 0 {
-                    end = i + 1;
-                    break;
-                }
-            }
-            _ => {}
-        }
-    }
-
-    if end == 0 {
-        return None;
-    }
-
-    serde_json::from_str(&json_str[..end]).ok()
 }
 
 /// Select the best caption track based on language preference.
@@ -352,40 +342,24 @@ mod tests {
 
     // ── extract_player_response ──────────────────────────────────────
 
+    // ── extract innertube api key ──────────────────────────────────────
+
     #[test]
-    fn test_extract_player_response_basic() {
-        let html =
-            r#"some html ytInitialPlayerResponse = {"videoDetails":{"title":"Test"}}; var x"#;
-        let result = extract_player_response(html).unwrap();
-        assert_eq!(result["videoDetails"]["title"], "Test");
+    fn test_extract_innertube_api_key() {
+        let html = r#"some stuff "INNERTUBE_API_KEY": "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8" more stuff"#;
+        let key = INNERTUBE_API_KEY_RE
+            .captures(html)
+            .map(|caps| caps[1].to_string());
+        assert_eq!(
+            key.as_deref(),
+            Some("AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8")
+        );
     }
 
     #[test]
-    fn test_extract_player_response_nested_braces() {
-        let html = r#"ytInitialPlayerResponse = {"a":{"b":{"c":1}},"d":2};</script>"#;
-        let result = extract_player_response(html).unwrap();
-        assert_eq!(result["a"]["b"]["c"], 1);
-        assert_eq!(result["d"], 2);
-    }
-
-    #[test]
-    fn test_extract_player_response_with_string_braces() {
-        let html = r#"ytInitialPlayerResponse = {"text":"hello {world}"};</script>"#;
-        let result = extract_player_response(html).unwrap();
-        assert_eq!(result["text"], "hello {world}");
-    }
-
-    #[test]
-    fn test_extract_player_response_missing() {
-        let html = "<html><body>no player response here</body></html>";
-        assert!(extract_player_response(html).is_none());
-    }
-
-    #[test]
-    fn test_extract_player_response_escaped_quotes() {
-        let html = r#"ytInitialPlayerResponse = {"text":"say \"hello\"","n":1};</script>"#;
-        let result = extract_player_response(html).unwrap();
-        assert_eq!(result["n"], 1);
+    fn test_extract_innertube_api_key_missing() {
+        let html = "<html>no api key here</html>";
+        assert!(INNERTUBE_API_KEY_RE.captures(html).is_none());
     }
 
     // ── select_caption_track ─────────────────────────────────────────
