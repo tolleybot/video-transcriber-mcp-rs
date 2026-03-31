@@ -6,10 +6,8 @@ use tracing::info;
 use super::types::VideoMetadata;
 
 static VIDEO_ID_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"(?:youtube\.com/(?:watch\?.*v=|embed/|v/|shorts/)|youtu\.be/)([a-zA-Z0-9_-]{11})",
-    )
-    .unwrap()
+    Regex::new(r"(?:youtube\.com/(?:watch\?.*v=|embed/|v/|shorts/)|youtu\.be/)([a-zA-Z0-9_-]{11})")
+        .unwrap()
 });
 
 pub struct YouTubeTranscriptFetcher {
@@ -54,6 +52,8 @@ impl YouTubeTranscriptFetcher {
             .send()
             .await
             .context("Failed to fetch YouTube page")?
+            .error_for_status()
+            .context("YouTube returned an error status")?
             .text()
             .await
             .context("Failed to read YouTube page body")?;
@@ -77,8 +77,7 @@ impl YouTubeTranscriptFetcher {
                 .as_str()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0),
-            upload_date: player_response["microformat"]["playerMicroformatRenderer"]
-                ["publishDate"]
+            upload_date: player_response["microformat"]["playerMicroformatRenderer"]["publishDate"]
                 .as_str()
                 .unwrap_or("")
                 .to_string(),
@@ -87,10 +86,10 @@ impl YouTubeTranscriptFetcher {
         };
 
         // Extract caption tracks
-        let caption_tracks = player_response["captions"]["playerCaptionsTracklistRenderer"]
-            ["captionTracks"]
-            .as_array()
-            .context("No caption tracks available for this video")?;
+        let caption_tracks =
+            player_response["captions"]["playerCaptionsTracklistRenderer"]["captionTracks"]
+                .as_array()
+                .context("No caption tracks available for this video")?;
 
         if caption_tracks.is_empty() {
             anyhow::bail!("No caption tracks available for this video");
@@ -114,6 +113,8 @@ impl YouTubeTranscriptFetcher {
             .send()
             .await
             .context("Failed to fetch caption XML")?
+            .error_for_status()
+            .context("Caption XML request returned an error status")?
             .text()
             .await
             .context("Failed to read caption XML")?;
@@ -135,9 +136,7 @@ impl YouTubeTranscriptFetcher {
 
 /// Extract video ID from a YouTube URL. Returns None for non-YouTube URLs.
 pub fn extract_youtube_video_id(url: &str) -> Option<String> {
-    VIDEO_ID_RE
-        .captures(url)
-        .map(|caps| caps[1].to_string())
+    VIDEO_ID_RE.captures(url).map(|caps| caps[1].to_string())
 }
 
 /// Parse the ytInitialPlayerResponse JSON from the YouTube page HTML.
@@ -248,34 +247,45 @@ fn parse_caption_xml(xml: &str) -> Result<String> {
     Ok(segments.join(" "))
 }
 
-/// Decode common HTML entities found in YouTube caption XML.
+/// Decode HTML entities in a single pass to avoid double-decode issues
+/// (e.g. `&amp;lt;` should become `&lt;`, not `<`).
 fn decode_html_entities(s: &str) -> String {
-    let mut result = s.to_string();
-    result = result.replace("&amp;", "&");
-    result = result.replace("&lt;", "<");
-    result = result.replace("&gt;", ">");
-    result = result.replace("&quot;", "\"");
-    result = result.replace("&#39;", "'");
-    result = result.replace("&apos;", "'");
-    result = result.replace("&nbsp;", " ");
-    result = result.replace("\n", " ");
+    static ENTITY_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"&(amp|lt|gt|quot|apos|nbsp|#(\d+)|#x([0-9a-fA-F]+));").unwrap()
+    });
 
-    // Handle numeric character references like &#123;
-    static NUMERIC_REF: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"&#(\d+);").unwrap());
-
-    let result = NUMERIC_REF
-        .replace_all(&result, |caps: &regex::Captures| {
-            caps[1]
-                .parse::<u32>()
-                .ok()
-                .and_then(char::from_u32)
-                .map(|c| c.to_string())
-                .unwrap_or_else(|| caps[0].to_string())
+    let decoded = ENTITY_RE
+        .replace_all(s, |caps: &regex::Captures| {
+            match &caps[1] {
+                "amp" => "&".to_string(),
+                "lt" => "<".to_string(),
+                "gt" => ">".to_string(),
+                "quot" => "\"".to_string(),
+                "apos" => "'".to_string(),
+                "nbsp" => " ".to_string(),
+                _ if caps.get(2).is_some() => {
+                    // Decimal numeric reference: &#123;
+                    caps[2]
+                        .parse::<u32>()
+                        .ok()
+                        .and_then(char::from_u32)
+                        .map(|c| c.to_string())
+                        .unwrap_or_else(|| caps[0].to_string())
+                }
+                _ if caps.get(3).is_some() => {
+                    // Hex numeric reference: &#x7B;
+                    u32::from_str_radix(&caps[3], 16)
+                        .ok()
+                        .and_then(char::from_u32)
+                        .map(|c| c.to_string())
+                        .unwrap_or_else(|| caps[0].to_string())
+                }
+                _ => caps[0].to_string(),
+            }
         })
         .to_string();
 
-    result
+    decoded.replace('\n', " ")
 }
 
 #[cfg(test)]
@@ -344,7 +354,8 @@ mod tests {
 
     #[test]
     fn test_extract_player_response_basic() {
-        let html = r#"some html ytInitialPlayerResponse = {"videoDetails":{"title":"Test"}}; var x"#;
+        let html =
+            r#"some html ytInitialPlayerResponse = {"videoDetails":{"title":"Test"}}; var x"#;
         let result = extract_player_response(html).unwrap();
         assert_eq!(result["videoDetails"]["title"], "Test");
     }
@@ -488,7 +499,10 @@ mod tests {
 
     #[test]
     fn test_decode_apostrophe_variants() {
-        assert_eq!(decode_html_entities("it&#39;s &apos;fine&apos;"), "it's 'fine'");
+        assert_eq!(
+            decode_html_entities("it&#39;s &apos;fine&apos;"),
+            "it's 'fine'"
+        );
     }
 
     #[test]
@@ -509,5 +523,17 @@ mod tests {
     #[test]
     fn test_decode_no_entities() {
         assert_eq!(decode_html_entities("plain text"), "plain text");
+    }
+
+    #[test]
+    fn test_decode_no_double_decode() {
+        // &amp;lt; should become &lt;, NOT <
+        assert_eq!(decode_html_entities("&amp;lt;"), "&lt;");
+    }
+
+    #[test]
+    fn test_decode_hex_reference() {
+        // &#x41; = 'A', &#x7B; = '{'
+        assert_eq!(decode_html_entities("&#x41;&#x7B;"), "A{");
     }
 }

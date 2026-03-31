@@ -45,49 +45,49 @@ impl TranscriberEngine {
         let is_local = !options.url.starts_with("http://") && !options.url.starts_with("https://");
 
         // For YouTube URLs, try fetching existing captions first (much faster)
-        if !is_local {
-            if let Some(video_id) = youtube::extract_youtube_video_id(&options.url) {
-                info!("🔍 Detected YouTube video ({}), checking for existing captions...", video_id);
-                match self
-                    .youtube_fetcher
-                    .fetch_transcript(&video_id, options.language.as_deref())
-                    .await
-                {
-                    Ok(yt_result) => {
-                        info!(
-                            "✅ Found YouTube captions (language: {}, auto-generated: {})",
-                            yt_result.language, yt_result.is_auto_generated
-                        );
+        if !is_local && let Some(video_id) = youtube::extract_youtube_video_id(&options.url) {
+            info!(
+                "🔍 Detected YouTube video ({}), checking for existing captions...",
+                video_id
+            );
+            match self
+                .youtube_fetcher
+                .fetch_transcript(&video_id, options.language.as_deref())
+                .await
+            {
+                Ok(yt_result) => {
+                    info!(
+                        "✅ Found YouTube captions (language: {}, auto-generated: {})",
+                        yt_result.language, yt_result.is_auto_generated
+                    );
 
-                        let files = self.save_outputs(
-                            &yt_result.metadata,
-                            &yt_result.transcript,
-                            &options.output_dir,
-                            options.model,
-                            TranscriptionSource::YouTubeCaptions,
-                        )?;
+                    let files = self.save_outputs(
+                        &yt_result.metadata,
+                        &yt_result.transcript,
+                        &options.output_dir,
+                        None,
+                        TranscriptionSource::YouTubeCaptions,
+                    )?;
 
-                        let word_count = yt_result.transcript.split_whitespace().count();
-                        let transcript_preview =
-                            make_preview(&yt_result.transcript);
+                    let word_count = yt_result.transcript.split_whitespace().count();
+                    let transcript_preview = make_preview(&yt_result.transcript);
 
-                        return Ok(TranscriptionResult {
-                            success: true,
-                            files,
-                            metadata: yt_result.metadata,
-                            transcript: yt_result.transcript,
-                            transcript_preview,
-                            word_count,
-                            model_used: options.model,
-                            source: TranscriptionSource::YouTubeCaptions,
-                        });
-                    }
-                    Err(e) => {
-                        info!(
-                            "⚠️ YouTube captions not available ({}), falling back to whisper pipeline",
-                            e
-                        );
-                    }
+                    return Ok(TranscriptionResult {
+                        success: true,
+                        files,
+                        metadata: yt_result.metadata,
+                        transcript: yt_result.transcript,
+                        transcript_preview,
+                        word_count,
+                        model_used: None,
+                        source: TranscriptionSource::YouTubeCaptions,
+                    });
+                }
+                Err(e) => {
+                    info!(
+                        "⚠️ YouTube captions not available ({}), falling back to whisper pipeline",
+                        e
+                    );
                 }
             }
         }
@@ -117,7 +117,7 @@ impl TranscriberEngine {
             &metadata,
             &transcript,
             &options.output_dir,
-            options.model,
+            Some(options.model),
             TranscriptionSource::WhisperTranscription,
         )?;
 
@@ -134,7 +134,7 @@ impl TranscriberEngine {
             transcript,
             transcript_preview,
             word_count,
-            model_used: options.model,
+            model_used: Some(options.model),
             source: TranscriptionSource::WhisperTranscription,
         })
     }
@@ -172,7 +172,7 @@ impl TranscriberEngine {
         metadata: &VideoMetadata,
         transcript: &str,
         output_dir: &str,
-        model: WhisperModel,
+        model: Option<WhisperModel>,
         source: TranscriptionSource,
     ) -> Result<OutputFiles> {
         let safe_filename = sanitize_filename(&format!("{}-{}", metadata.video_id, metadata.title));
@@ -188,8 +188,8 @@ impl TranscriberEngine {
         let json_output = serde_json::json!({
             "metadata": metadata,
             "transcript": transcript,
-            "model": model.as_str(),
-            "source": format!("{}", source),
+            "model": model.map(|m| m.as_str().to_string()),
+            "source": source.to_string(),
         });
         std::fs::write(&json_path, serde_json::to_string_pretty(&json_output)?)?;
 
@@ -197,7 +197,10 @@ impl TranscriberEngine {
         let engine_str = match source {
             TranscriptionSource::YouTubeCaptions => "YouTube Captions (direct fetch)".to_string(),
             TranscriptionSource::WhisperTranscription => {
-                format!("whisper.cpp (Rust) - Model: {}", model.as_str())
+                let model_name = model
+                    .map(|m| m.as_str().to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                format!("whisper.cpp (Rust) - Model: {}", model_name)
             }
         };
 

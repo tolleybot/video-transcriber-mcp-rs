@@ -312,7 +312,7 @@ impl ServerHandler for VideoTranscriberServer {
                             - Duration: {}s\n\n\
                             **Transcription Settings:**\n\
                             - Source: {}\n\
-                            - Model: {:?}\n\n\
+                            - Model: {}\n\n\
                             **Output Files:**\n\
                             - Text: {}\n\
                             - JSON: {}\n\
@@ -324,7 +324,10 @@ impl ServerHandler for VideoTranscriberServer {
                             result.metadata.platform,
                             result.metadata.duration,
                             result.source,
-                            result.model_used,
+                            result
+                                .model_used
+                                .map(|m| format!("{:?}", m))
+                                .unwrap_or_else(|| "N/A (captions)".to_string()),
                             result.files.txt,
                             result.files.json,
                             result.files.md,
@@ -458,7 +461,7 @@ impl ServerHandler for VideoTranscriberServer {
                 }
 
                 // Sort by modification time (newest first)
-                video_data.sort_by(|a, b| b.2.cmp(&a.2));
+                video_data.sort_by_key(|b| std::cmp::Reverse(b.2));
 
                 // Apply limit if specified
                 let videos_to_show = if let Some(lim) = limit {

@@ -210,8 +210,8 @@ impl McpServer {
                             - Platform: {}\n\
                             - Duration: {}s\n\n\
                             **Transcription Settings:**\n\
-                            - Model: {:?}\n\
-                            - Engine: whisper.cpp (Rust)\n\n\
+                            - Source: {}\n\
+                            - Model: {}\n\n\
                             **Output Files:**\n\
                             - Text: {}\n\
                             - JSON: {}\n\
@@ -222,7 +222,10 @@ impl McpServer {
                             result.metadata.title,
                             result.metadata.platform,
                             result.metadata.duration,
-                            result.model_used,
+                            result.source,
+                            result.model_used
+                                .map(|m| format!("{:?}", m))
+                                .unwrap_or_else(|| "N/A (captions)".to_string()),
                             result.files.txt,
                             result.files.json,
                             result.files.md,

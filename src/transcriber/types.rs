@@ -93,6 +93,6 @@ pub struct TranscriptionResult {
     pub transcript: String,
     pub transcript_preview: String,
     pub word_count: usize,
-    pub model_used: WhisperModel,
+    pub model_used: Option<WhisperModel>,
     pub source: TranscriptionSource,
 }
