@@ -311,8 +311,8 @@ impl ServerHandler for VideoTranscriberServer {
                             - Platform: {}\n\
                             - Duration: {}s\n\n\
                             **Transcription Settings:**\n\
-                            - Model: {:?}\n\
-                            - Engine: whisper.cpp (Rust)\n\n\
+                            - Source: {}\n\
+                            - Model: {:?}\n\n\
                             **Output Files:**\n\
                             - Text: {}\n\
                             - JSON: {}\n\
@@ -323,6 +323,7 @@ impl ServerHandler for VideoTranscriberServer {
                             result.metadata.title,
                             result.metadata.platform,
                             result.metadata.duration,
+                            result.source,
                             result.model_used,
                             result.files.txt,
                             result.files.json,
