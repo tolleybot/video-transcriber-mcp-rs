@@ -287,3 +287,43 @@ fn sanitize_filename(name: &str) -> String {
         .take(150)
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_make_preview_short_text() {
+        let text = "Hello world";
+        assert_eq!(make_preview(text), "Hello world");
+    }
+
+    #[test]
+    fn test_make_preview_truncates_long_text() {
+        let text = "a".repeat(600);
+        let preview = make_preview(&text);
+        assert!(preview.ends_with("..."));
+        // 501 chars of 'a' + "..."
+        assert!(preview.len() <= 504);
+    }
+
+    #[test]
+    fn test_make_preview_safe_on_multibyte() {
+        // 'é' is 2 bytes in UTF-8
+        let text = "é".repeat(300); // 600 bytes, 300 chars
+        let preview = make_preview(&text);
+        assert!(preview.ends_with("..."));
+        // Should not panic on a multi-byte boundary
+    }
+
+    #[test]
+    fn test_sanitize_filename_replaces_special_chars() {
+        assert_eq!(sanitize_filename("a/b\\c:d"), "a-b-c-d");
+    }
+
+    #[test]
+    fn test_sanitize_filename_truncates_long_names() {
+        let long_name = "a".repeat(200);
+        assert_eq!(sanitize_filename(&long_name).len(), 150);
+    }
+}

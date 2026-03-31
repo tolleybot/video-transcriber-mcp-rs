@@ -277,3 +277,237 @@ fn decode_html_entities(s: &str) -> String {
 
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // ── extract_youtube_video_id ──────────────────────────────────────
+
+    #[test]
+    fn test_extract_id_standard_url() {
+        let url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+        assert_eq!(
+            extract_youtube_video_id(url).as_deref(),
+            Some("dQw4w9WgXcQ")
+        );
+    }
+
+    #[test]
+    fn test_extract_id_short_url() {
+        let url = "https://youtu.be/dQw4w9WgXcQ";
+        assert_eq!(
+            extract_youtube_video_id(url).as_deref(),
+            Some("dQw4w9WgXcQ")
+        );
+    }
+
+    #[test]
+    fn test_extract_id_embed_url() {
+        let url = "https://www.youtube.com/embed/dQw4w9WgXcQ";
+        assert_eq!(
+            extract_youtube_video_id(url).as_deref(),
+            Some("dQw4w9WgXcQ")
+        );
+    }
+
+    #[test]
+    fn test_extract_id_shorts_url() {
+        let url = "https://www.youtube.com/shorts/dQw4w9WgXcQ";
+        assert_eq!(
+            extract_youtube_video_id(url).as_deref(),
+            Some("dQw4w9WgXcQ")
+        );
+    }
+
+    #[test]
+    fn test_extract_id_with_extra_params() {
+        let url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=120&list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf";
+        assert_eq!(
+            extract_youtube_video_id(url).as_deref(),
+            Some("dQw4w9WgXcQ")
+        );
+    }
+
+    #[test]
+    fn test_extract_id_non_youtube_url() {
+        assert!(extract_youtube_video_id("https://vimeo.com/123456").is_none());
+    }
+
+    #[test]
+    fn test_extract_id_plain_text() {
+        assert!(extract_youtube_video_id("not a url at all").is_none());
+    }
+
+    // ── extract_player_response ──────────────────────────────────────
+
+    #[test]
+    fn test_extract_player_response_basic() {
+        let html = r#"some html ytInitialPlayerResponse = {"videoDetails":{"title":"Test"}}; var x"#;
+        let result = extract_player_response(html).unwrap();
+        assert_eq!(result["videoDetails"]["title"], "Test");
+    }
+
+    #[test]
+    fn test_extract_player_response_nested_braces() {
+        let html = r#"ytInitialPlayerResponse = {"a":{"b":{"c":1}},"d":2};</script>"#;
+        let result = extract_player_response(html).unwrap();
+        assert_eq!(result["a"]["b"]["c"], 1);
+        assert_eq!(result["d"], 2);
+    }
+
+    #[test]
+    fn test_extract_player_response_with_string_braces() {
+        let html = r#"ytInitialPlayerResponse = {"text":"hello {world}"};</script>"#;
+        let result = extract_player_response(html).unwrap();
+        assert_eq!(result["text"], "hello {world}");
+    }
+
+    #[test]
+    fn test_extract_player_response_missing() {
+        let html = "<html><body>no player response here</body></html>";
+        assert!(extract_player_response(html).is_none());
+    }
+
+    #[test]
+    fn test_extract_player_response_escaped_quotes() {
+        let html = r#"ytInitialPlayerResponse = {"text":"say \"hello\"","n":1};</script>"#;
+        let result = extract_player_response(html).unwrap();
+        assert_eq!(result["n"], 1);
+    }
+
+    // ── select_caption_track ─────────────────────────────────────────
+
+    fn make_track(lang: &str, kind: Option<&str>, url: &str) -> serde_json::Value {
+        let mut track = json!({
+            "baseUrl": url,
+            "languageCode": lang,
+        });
+        if let Some(k) = kind {
+            track["kind"] = json!(k);
+        }
+        track
+    }
+
+    #[test]
+    fn test_select_prefers_manual_match() {
+        let tracks = vec![
+            make_track("en", Some("asr"), "http://asr-en"),
+            make_track("en", None, "http://manual-en"),
+        ];
+        let (url, lang, is_asr) = select_caption_track(&tracks, "en").unwrap();
+        assert_eq!(url, "http://manual-en");
+        assert_eq!(lang, "en");
+        assert!(!is_asr);
+    }
+
+    #[test]
+    fn test_select_falls_back_to_asr_match() {
+        let tracks = vec![
+            make_track("en", Some("asr"), "http://asr-en"),
+            make_track("fr", None, "http://manual-fr"),
+        ];
+        let (url, _, is_asr) = select_caption_track(&tracks, "en").unwrap();
+        assert_eq!(url, "http://asr-en");
+        assert!(is_asr);
+    }
+
+    #[test]
+    fn test_select_falls_back_to_first_manual() {
+        let tracks = vec![
+            make_track("es", None, "http://manual-es"),
+            make_track("fr", Some("asr"), "http://asr-fr"),
+        ];
+        let (url, lang, is_asr) = select_caption_track(&tracks, "de").unwrap();
+        assert_eq!(url, "http://manual-es");
+        assert_eq!(lang, "es");
+        assert!(!is_asr);
+    }
+
+    #[test]
+    fn test_select_falls_back_to_first_asr() {
+        let tracks = vec![make_track("ja", Some("asr"), "http://asr-ja")];
+        let (url, lang, is_asr) = select_caption_track(&tracks, "en").unwrap();
+        assert_eq!(url, "http://asr-ja");
+        assert_eq!(lang, "ja");
+        assert!(is_asr);
+    }
+
+    #[test]
+    fn test_select_empty_tracks() {
+        let tracks: Vec<serde_json::Value> = vec![];
+        assert!(select_caption_track(&tracks, "en").is_none());
+    }
+
+    #[test]
+    fn test_select_skips_tracks_without_url() {
+        let tracks = vec![
+            json!({"languageCode": "en"}), // no baseUrl
+            make_track("en", Some("asr"), "http://asr-en"),
+        ];
+        let (url, _, _) = select_caption_track(&tracks, "en").unwrap();
+        assert_eq!(url, "http://asr-en");
+    }
+
+    // ── parse_caption_xml ────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_caption_xml_basic() {
+        let xml = r#"<?xml version="1.0" encoding="utf-8"?><transcript><text start="0" dur="2.5">Hello everyone</text><text start="2.5" dur="3.0">welcome to the video</text></transcript>"#;
+        let result = parse_caption_xml(xml).unwrap();
+        assert_eq!(result, "Hello everyone welcome to the video");
+    }
+
+    #[test]
+    fn test_parse_caption_xml_with_entities() {
+        let xml = r#"<transcript><text start="0" dur="1">Tom &amp; Jerry</text><text start="1" dur="1">said &quot;hi&quot;</text></transcript>"#;
+        let result = parse_caption_xml(xml).unwrap();
+        assert_eq!(result, r#"Tom & Jerry said "hi""#);
+    }
+
+    #[test]
+    fn test_parse_caption_xml_skips_empty() {
+        let xml = r#"<transcript><text start="0" dur="1">Hello</text><text start="1" dur="1">   </text><text start="2" dur="1">World</text></transcript>"#;
+        let result = parse_caption_xml(xml).unwrap();
+        assert_eq!(result, "Hello World");
+    }
+
+    #[test]
+    fn test_parse_caption_xml_empty_input() {
+        let result = parse_caption_xml("").unwrap();
+        assert_eq!(result, "");
+    }
+
+    // ── decode_html_entities ─────────────────────────────────────────
+
+    #[test]
+    fn test_decode_named_entities() {
+        assert_eq!(decode_html_entities("&amp;&lt;&gt;&quot;"), "&<>\"");
+    }
+
+    #[test]
+    fn test_decode_apostrophe_variants() {
+        assert_eq!(decode_html_entities("it&#39;s &apos;fine&apos;"), "it's 'fine'");
+    }
+
+    #[test]
+    fn test_decode_numeric_reference() {
+        assert_eq!(decode_html_entities("&#65;&#66;&#67;"), "ABC");
+    }
+
+    #[test]
+    fn test_decode_newlines_replaced() {
+        assert_eq!(decode_html_entities("line1\nline2"), "line1 line2");
+    }
+
+    #[test]
+    fn test_decode_nbsp() {
+        assert_eq!(decode_html_entities("hello&nbsp;world"), "hello world");
+    }
+
+    #[test]
+    fn test_decode_no_entities() {
+        assert_eq!(decode_html_entities("plain text"), "plain text");
+    }
+}
