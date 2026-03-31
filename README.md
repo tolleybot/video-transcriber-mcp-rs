@@ -16,7 +16,26 @@ A Model Context Protocol (MCP) server that transcribes videos from **1000+ platf
 - **Dual transport** - stdio (local) and Streamable HTTP (remote)
 - **Single binary** - no Python or Node.js required
 
-## Installation
+## Quick Start with Claude Code
+
+The easiest way to get started — just ask Claude Code to do everything for you:
+
+```
+Clone https://github.com/tolleybot/video-transcriber-mcp-rs.git,
+build it, download the medium whisper model, and add it as an MCP server.
+```
+
+Claude Code will handle the entire setup: cloning, building, downloading the model, and registering the MCP server. Once it's done, restart Claude Code and the transcription tool is ready to use.
+
+Then just ask:
+
+```
+Transcribe this YouTube video: https://www.youtube.com/watch?v=VIDEO_ID
+
+Transcribe this local file: /path/to/video.mp4
+```
+
+## Manual Installation
 
 ### Prerequisites
 
@@ -72,29 +91,11 @@ bash scripts/download-models.sh all
 
 Note: For YouTube videos with existing captions, the model choice doesn't matter - captions are fetched directly and no whisper transcription is performed.
 
-## Setup with Claude Code
+## MCP Server Registration
 
-The easiest way to set up is to just ask Claude Code to do it for you:
-
-```
-Clone https://github.com/tolleybot/video-transcriber-mcp-rs.git,
-build it, download the medium whisper model, and add it as an MCP server.
-```
-
-Claude Code will handle the entire setup: cloning, building, downloading the model, and registering the MCP server. Once it's done, restart Claude Code and the transcription tool is ready to use.
-
-### Manual Setup
-
-If you prefer to do it yourself:
+After building, register the MCP server:
 
 ```bash
-# 1. Build the binary
-cargo build --release
-
-# 2. Download at least one whisper model
-bash scripts/download-models.sh medium
-
-# 3. Add as an MCP server
 claude mcp add video-transcriber-mcp -s user -- /path/to/target/release/video-transcriber-mcp
 ```
 
@@ -108,16 +109,6 @@ Or add manually to your MCP client config:
     }
   }
 }
-```
-
-### Usage Examples
-
-```
-Transcribe this YouTube video: https://www.youtube.com/watch?v=VIDEO_ID
-
-Transcribe this video with the medium model: https://www.youtube.com/watch?v=VIDEO_ID
-
-Transcribe this local file: /path/to/video.mp4
 ```
 
 ## How It Works
