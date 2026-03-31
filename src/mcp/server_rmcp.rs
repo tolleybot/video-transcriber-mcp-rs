@@ -70,7 +70,7 @@ impl ServerHandler for VideoTranscriberServer {
                                 "model": {
                                     "type": "string",
                                     "enum": ["tiny", "base", "small", "medium", "large"],
-                                    "description": "Whisper model to use. Larger models are more accurate but slower. Default: 'base'"
+                                    "description": "Whisper model to use. Larger models are more accurate but slower. Default: 'medium'"
                                 },
                                 "language": {
                                     "type": "string",
@@ -285,7 +285,7 @@ impl ServerHandler for VideoTranscriberServer {
                     .get("model")
                     .and_then(|v| v.as_str())
                     .and_then(|s| s.parse::<WhisperModel>().ok())
-                    .unwrap_or(WhisperModel::Base);
+                    .unwrap_or(WhisperModel::Medium);
 
                 let language = args
                     .get("language")
