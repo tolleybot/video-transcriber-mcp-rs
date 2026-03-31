@@ -9,7 +9,7 @@ A Model Context Protocol (MCP) server that transcribes videos from **1000+ platf
 - **YouTube captions fast path** - fetches existing captions directly via YouTube's InnerTube API (no download or transcription needed)
 - **Whisper fallback** - full transcription pipeline for videos without captions (yt-dlp + ffmpeg + whisper.cpp)
 - **1000+ platforms** supported via yt-dlp (YouTube, Vimeo, TikTok, Twitter, etc.)
-- **Local video files** supported (mp4, avi, mov, mkv, etc.)
+- **Local video and audio files** supported (mp4, mov, mkv, mp3, wav, m4a, flac, etc.)
 - **5 whisper model sizes** (tiny, base, small, medium, large)
 - **90+ languages** with automatic detection
 - **Multiple output formats** (TXT, JSON, Markdown)
