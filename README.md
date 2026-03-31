@@ -74,12 +74,25 @@ Note: For YouTube videos with existing captions, the model choice doesn't matter
 
 ## Setup with Claude Code
 
+The easiest way to set up is to just ask Claude Code to do it for you:
+
+```
+Clone https://github.com/tolleybot/video-transcriber-mcp-rs.git,
+build it, download the medium whisper model, and add it as an MCP server.
+```
+
+Claude Code will handle the entire setup: cloning, building, downloading the model, and registering the MCP server. Once it's done, restart Claude Code and the transcription tool is ready to use.
+
+### Manual Setup
+
+If you prefer to do it yourself:
+
 ```bash
 # 1. Build the binary
 cargo build --release
 
 # 2. Download at least one whisper model
-bash scripts/download-models.sh base
+bash scripts/download-models.sh medium
 
 # 3. Add as an MCP server
 claude mcp add video-transcriber-mcp -s user -- /path/to/target/release/video-transcriber-mcp
