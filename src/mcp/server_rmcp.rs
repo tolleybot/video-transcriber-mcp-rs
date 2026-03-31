@@ -70,7 +70,7 @@ impl ServerHandler for VideoTranscriberServer {
                                 "model": {
                                     "type": "string",
                                     "enum": ["tiny", "base", "small", "medium", "large"],
-                                    "description": "Whisper model to use. Larger models are more accurate but slower. Default: 'base'"
+                                    "description": "Whisper model to use. Larger models are more accurate but slower. Default: 'medium'"
                                 },
                                 "language": {
                                     "type": "string",
@@ -285,7 +285,7 @@ impl ServerHandler for VideoTranscriberServer {
                     .get("model")
                     .and_then(|v| v.as_str())
                     .and_then(|s| s.parse::<WhisperModel>().ok())
-                    .unwrap_or(WhisperModel::Base);
+                    .unwrap_or(WhisperModel::Medium);
 
                 let language = args
                     .get("language")
@@ -311,8 +311,8 @@ impl ServerHandler for VideoTranscriberServer {
                             - Platform: {}\n\
                             - Duration: {}s\n\n\
                             **Transcription Settings:**\n\
-                            - Model: {:?}\n\
-                            - Engine: whisper.cpp (Rust)\n\n\
+                            - Source: {}\n\
+                            - Model: {}\n\n\
                             **Output Files:**\n\
                             - Text: {}\n\
                             - JSON: {}\n\
@@ -323,7 +323,11 @@ impl ServerHandler for VideoTranscriberServer {
                             result.metadata.title,
                             result.metadata.platform,
                             result.metadata.duration,
-                            result.model_used,
+                            result.source,
+                            result
+                                .model_used
+                                .map(|m| format!("{:?}", m))
+                                .unwrap_or_else(|| "N/A (captions)".to_string()),
                             result.files.txt,
                             result.files.json,
                             result.files.md,
@@ -457,7 +461,7 @@ impl ServerHandler for VideoTranscriberServer {
                 }
 
                 // Sort by modification time (newest first)
-                video_data.sort_by(|a, b| b.2.cmp(&a.2));
+                video_data.sort_by_key(|b| std::cmp::Reverse(b.2));
 
                 // Apply limit if specified
                 let videos_to_show = if let Some(lim) = limit {

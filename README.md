@@ -1,145 +1,171 @@
-# Video Transcriber MCP 🚀
+# Video Transcriber MCP
 
 **High-performance video transcription MCP server using whisper.cpp (Rust)**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
-[![Version](https://img.shields.io/crates/v/video-transcriber-mcp)](https://crates.io/crates/video-transcriber-mcp)
+A Model Context Protocol (MCP) server that transcribes videos from **1000+ platforms** using whisper.cpp. For YouTube videos, it first tries to fetch existing captions directly (instant) before falling back to whisper transcription. Built with Rust for maximum performance.
 
-A Model Context Protocol (MCP) server that transcribes videos from **1000+ platforms** using whisper.cpp. Built with Rust for maximum performance and efficiency.
+## Features
 
-## 📦 Installation
+- **YouTube captions fast path** - fetches existing captions directly via YouTube's InnerTube API (no download or transcription needed)
+- **Whisper fallback** - full transcription pipeline for videos without captions (yt-dlp + ffmpeg + whisper.cpp)
+- **1000+ platforms** supported via yt-dlp (YouTube, Vimeo, TikTok, Twitter, etc.)
+- **Local video files** supported (mp4, avi, mov, mkv, etc.)
+- **5 whisper model sizes** (tiny, base, small, medium, large)
+- **90+ languages** with automatic detection
+- **Multiple output formats** (TXT, JSON, Markdown)
+- **Dual transport** - stdio (local) and Streamable HTTP (remote)
+- **Single binary** - no Python or Node.js required
 
-### Homebrew (macOS/Linux) - Recommended
+## Installation
 
-The easiest way to install with all dependencies:
+### Prerequisites
 
-```bash
-brew install nhatvu148/tap/video-transcriber-mcp
-```
-
-This automatically installs the binary along with required dependencies (cmake, yt-dlp, ffmpeg).
-
-### Cargo Install
-
-If you have Rust installed:
-
-```bash
-cargo install video-transcriber-mcp
-```
-
-**Note:** You'll need to manually install dependencies: `yt-dlp`, `ffmpeg`, `cmake`
-
-### Pre-built Binaries
-
-Download from [GitHub Releases](https://github.com/nhatvu148/video-transcriber-mcp-rs/releases/latest):
+- **Rust** 1.85+ (for building from source)
+- **yt-dlp** - for downloading videos from non-YouTube platforms, or YouTube videos without captions
+- **ffmpeg** - for audio extraction
 
 ```bash
-# macOS (Intel)
-curl -L https://github.com/nhatvu148/video-transcriber-mcp-rs/releases/latest/download/video-transcriber-mcp-x86_64-apple-darwin.tar.gz | tar xz
-sudo mv video-transcriber-mcp /usr/local/bin/
+# macOS
+brew install yt-dlp ffmpeg
 
-# macOS (Apple Silicon)
-curl -L https://github.com/nhatvu148/video-transcriber-mcp-rs/releases/latest/download/video-transcriber-mcp-aarch64-apple-darwin.tar.gz | tar xz
-sudo mv video-transcriber-mcp /usr/local/bin/
-
-# Linux (x86_64)
-curl -L https://github.com/nhatvu148/video-transcriber-mcp-rs/releases/latest/download/video-transcriber-mcp-x86_64-unknown-linux-gnu.tar.gz | tar xz
-sudo mv video-transcriber-mcp /usr/local/bin/
-
-# Windows: Download .zip from releases page
+# Linux (Debian/Ubuntu)
+pip install yt-dlp
+sudo apt install ffmpeg
 ```
 
-**Note:** You'll need to manually install dependencies: `yt-dlp`, `ffmpeg`
-
-## 🎯 Why Rust?
-
-This version uses **whisper.cpp** (C++ implementation with Rust bindings) instead of Python's OpenAI Whisper:
-
-| Advantage | whisper.cpp (Rust) | OpenAI Whisper (Python) |
-|-----------|-------------------|------------------------|
-| **Performance** | Native C++ speed | Python interpreter overhead |
-| **Memory** | Lower footprint | Higher memory usage |
-| **Startup** | Instant (<100ms) | Slow (~2-3s model loading) |
-| **Dependencies** | Standalone binary | Requires Python + packages |
-| **Portability** | Single binary | Python environment needed |
-
-Real-world performance depends on your hardware, video length, and chosen model.
-
-## ✨ Features
-
-- 🚀 **High performance** transcription using whisper.cpp (C++ with Rust bindings)
-- 🎥 Download from **1000+ platforms** (YouTube, Vimeo, TikTok, Twitter, etc.)
-- 📂 Transcribe **local video files** (mp4, avi, mov, mkv, etc.)
-- 🎤 **100% offline** transcription (privacy-first)
-- 🎛️ **5 model sizes** (tiny, base, small, medium, large)
-- 🌐 **90+ languages** supported
-- 📝 **Multiple output formats** (TXT, JSON, Markdown)
-- 🔌 **MCP integration** for Claude Code
-- 🌐 **Dual transport** - stdio (local) and Streamable HTTP (remote)
-- ⚡ **Native binary** - no Python or Node.js required
-- 💾 **Low memory footprint** compared to Python implementations
-
-## ⚡ Quick Start (Using Taskfile)
-
-**The fastest way to get started:**
+### Build from Source
 
 ```bash
-# 1. Install Task (if not already installed)
-brew install go-task/tap/go-task
-
-# 2. Complete setup (build + download model)
-task setup
-
-# 3. Run a quick test
-task test:quick
-
-# Done! 🎉
+git clone https://github.com/tolleybot/video-transcriber-mcp-rs.git
+cd video-transcriber-mcp-rs
+cargo build --release
 ```
 
-**Available Commands:**
+The binary will be at `target/release/video-transcriber-mcp`.
+
+## Whisper Models
+
+Whisper models are required for transcribing local files and videos without existing captions. Models are stored in `~/.cache/video-transcriber-mcp/models/`.
+
+### Download Models
+
 ```bash
-task setup           # Complete project setup
-task test:quick      # Test with short video
-task benchmark       # Run performance benchmark
-task deps:check      # Check dependencies
-task download:base   # Download base model
-task help            # Show all commands
+# Download a specific model
+bash scripts/download-models.sh base
+bash scripts/download-models.sh medium
+
+# Download all models
+bash scripts/download-models.sh all
 ```
 
-See [Taskfile.yml](Taskfile.yml) for all available tasks.
+### Model Comparison
 
----
+| Model | Size | Speed | Accuracy | Best For |
+|-------|------|-------|----------|----------|
+| **tiny** | ~75 MB | Fastest | Low | Quick drafts, testing |
+| **base** | ~142 MB | Fast | Good | Default, general use |
+| **small** | ~466 MB | Moderate | Better | Biggest accuracy jump from base for English |
+| **medium** | ~1.5 GB | Slow | High | Accented speech, technical jargon, non-English |
+| **large** | ~2.9 GB | Slowest | Highest | Best accuracy, multilingual content |
 
-## 🌐 Transport Modes
+**Recommendation:** Start with **base** for testing. Use **small** or **medium** for production. The **base to small** jump gives the biggest accuracy improvement for English. **Medium** is worth it for non-English or noisy audio.
 
-The server supports two transport modes:
+Note: For YouTube videos with existing captions, the model choice doesn't matter - captions are fetched directly and no whisper transcription is performed.
 
-### Stdio Transport (Default)
+## Setup with Claude Code
 
-Standard I/O transport for local CLI usage with Claude Code. This is the default mode.
+```bash
+# 1. Build the binary
+cargo build --release
+
+# 2. Download at least one whisper model
+bash scripts/download-models.sh base
+
+# 3. Add as an MCP server
+claude mcp add video-transcriber-mcp -s user -- /path/to/target/release/video-transcriber-mcp
+```
+
+Or add manually to your MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "video-transcriber-mcp": {
+      "command": "/path/to/video-transcriber-mcp"
+    }
+  }
+}
+```
+
+### Usage Examples
+
+```
+Transcribe this YouTube video: https://www.youtube.com/watch?v=VIDEO_ID
+
+Transcribe this video with the medium model: https://www.youtube.com/watch?v=VIDEO_ID
+
+Transcribe this local file: /path/to/video.mp4
+```
+
+## How It Works
+
+### YouTube Videos
+
+1. Extract video ID from URL
+2. Fetch YouTube page to get InnerTube API key
+3. Call InnerTube API (as Android client) to get caption tracks
+4. If captions exist: fetch caption XML, parse, and return transcript (instant)
+5. If no captions: fall back to full pipeline below
+
+### Other Videos / Local Files
+
+1. Download video via yt-dlp (or use local file directly)
+2. Extract audio via ffmpeg
+3. Transcribe audio with whisper.cpp
+4. Save output as TXT, JSON, and Markdown
+
+### Output
+
+Transcripts are saved to `~/Downloads/video-transcripts/` in three formats:
+
+```
+video-id-title.txt   # Plain text transcript
+video-id-title.json  # JSON with metadata and transcript source
+video-id-title.md    # Markdown with video info and transcript
+```
+
+## MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `transcribe_video` | Transcribe a video from URL or local file |
+| `check_dependencies` | Check if yt-dlp, ffmpeg, and models are installed |
+| `list_supported_sites` | Show supported video platforms |
+| `list_transcripts` | List saved transcripts |
+| `get_latest_transcript` | Get the most recent transcript |
+| `delete_transcript` | Delete a transcript by video ID |
+| `cleanup_old_transcripts` | Delete transcripts older than N days |
+| `delete_all_transcripts` | Delete all transcripts |
+
+## Transport Modes
+
+### Stdio (Default)
+
+For local use with Claude Code:
 
 ```bash
 video-transcriber-mcp
-# or explicitly:
-video-transcriber-mcp --transport stdio
 ```
 
-### Streamable HTTP Transport
+### Streamable HTTP
 
-HTTP transport for remote access. Allows the MCP server to be accessed over the network.
+For remote/team access:
 
 ```bash
-# Start HTTP server on default port (8080)
-video-transcriber-mcp --transport http
-
-# Custom host and port
-video-transcriber-mcp --transport http --host 0.0.0.0 --port 3000
+video-transcriber-mcp --transport http --host 0.0.0.0 --port 8080
 ```
 
-**Remote MCP Client Configuration:**
-
-For HTTP transport, configure your MCP client with the URL:
+Configure clients with:
 
 ```json
 {
@@ -151,325 +177,32 @@ For HTTP transport, configure your MCP client with the URL:
 }
 ```
 
-**Benefits of HTTP Transport:**
-- No local installation required for clients
-- Centralized server deployment
-- Automatic updates (server-side)
-- Better for team environments
-- Compatible with serverless platforms
-
-### CLI Options
-
-```bash
-video-transcriber-mcp --help
-
-Options:
-  -t, --transport <TRANSPORT>  Transport mode [default: stdio] [possible values: stdio, http]
-      --host <HOST>            Host address for HTTP transport [default: 127.0.0.1]
-  -p, --port <PORT>            Port for HTTP transport [default: 8080]
-  -h, --help                   Print help
-  -V, --version                Print version
-```
-
----
-
-## 📦 Manual Build from Source
-
-### Prerequisites
-
-1. **Rust** (1.85+ for Rust 2024 edition)
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-2. **yt-dlp** (for downloading videos)
-```bash
-# macOS
-brew install yt-dlp
-
-# Linux
-pip install yt-dlp
-
-# Windows
-winget install yt-dlp.yt-dlp
-```
-
-3. **FFmpeg** (for audio processing)
-```bash
-# macOS
-brew install ffmpeg
-
-# Linux
-sudo apt install ffmpeg  # Debian/Ubuntu
-sudo dnf install ffmpeg  # Fedora
-
-# Windows
-choco install ffmpeg
-```
-
-### Build from Source
-
-```bash
-# Clone the repository
-git clone https://github.com/nhatvu148/video-transcriber-mcp-rs.git
-cd video-transcriber-mcp-rs
-
-# Build the project
-cargo build --release
-
-# The binary will be at: target/release/video-transcriber-mcp-rs
-```
-
-### Download Whisper Models
-
-```bash
-# Download base model (recommended for testing)
-bash scripts/download-models.sh base
-
-# Or download all models
-bash scripts/download-models.sh all
-```
-
-Models are stored in `~/.cache/video-transcriber-mcp/models/`
-
-## 🚀 Quick Start
-
-### MCP Server (for Claude Code)
-
-Add to `~/.claude/settings.json`:
-
-**Option 1: If installed via GitHub Release or cargo install:**
-```json
-{
-  "mcpServers": {
-    "video-transcriber-mcp": {
-      "command": "video-transcriber-mcp",
-      "args": [],
-      "env": {
-        "RUST_LOG": "info"
-      }
-    }
-  }
-}
-```
-
-**Option 2: If built from source:**
-```json
-{
-  "mcpServers": {
-    "video-transcriber-mcp": {
-      "command": "/absolute/path/to/video-transcriber-mcp-rs/target/release/video-transcriber-mcp",
-      "args": [],
-      "env": {
-        "RUST_LOG": "info"
-      }
-    }
-  }
-}
-```
-
-Then use in Claude Code:
-
-**Basic transcription (uses base model by default):**
-```
-Please transcribe this YouTube video: https://www.youtube.com/watch?v=VIDEO_ID
-```
-
-**Transcribe with specific model:**
-```
-Transcribe this video using the large model for best accuracy:
-https://www.youtube.com/watch?v=VIDEO_ID
-```
-
-**Transcribe local video file:**
-```
-Transcribe this local video file: /Users/myname/Videos/meeting.mp4
-```
-
-**Transcribe in specific language:**
-```
-Transcribe this Spanish video: https://www.youtube.com/watch?v=VIDEO_ID
-(language: es, model: medium)
-```
-
-## 📊 Performance
-
-### Expected Performance Characteristics
-
-Based on whisper.cpp vs OpenAI Whisper benchmarks from the community:
-
-**Transcription Speed** (approximate, varies by hardware):
-- whisper.cpp is typically **2-6x faster** than Python Whisper
-- Faster startup time (no Python interpreter overhead)
-- Lower memory footprint (no Python runtime)
-
-**Real-world factors that affect performance:**
-- CPU: More cores = faster processing
-- Model size: Tiny is fastest, Large is slowest but most accurate
-- Video length: Longer videos take proportionally more time
-- Audio complexity: Clear speech transcribes faster than noisy audio
-
-### Want to help?
-
-We're collecting real benchmark data! If you run both versions, please share your results:
-- Hardware specs (CPU, RAM)
-- Video length tested
-- Model used
-- Time taken for each version
-
-Open an issue with your benchmark results to help improve this section!
-
-## 🎛️ Model Comparison
-
-| Model | Speed | Accuracy | Memory | Use Case |
-|-------|-------|----------|--------|----------|
-| **tiny** | ⚡⚡⚡⚡⚡ | ⭐⭐ | ~400 MB | Quick drafts, testing |
-| **base** | ⚡⚡⚡⚡ | ⭐⭐⭐ | ~600 MB | General use (default) |
-| **small** | ⚡⚡⚡ | ⭐⭐⭐⭐ | ~1.2 GB | Better accuracy |
-| **medium** | ⚡⚡ | ⭐⭐⭐⭐⭐ | ~2.5 GB | High accuracy |
-| **large** | ⚡ | ⭐⭐⭐⭐⭐⭐ | ~4.8 GB | Best accuracy, slowest |
-
-## 🌍 Supported Platforms
-
-Thanks to yt-dlp, this tool supports **1000+ video platforms** including:
-
-- **Social Media**: YouTube, TikTok, Twitter/X, Facebook, Instagram, Reddit
-- **Video Hosting**: Vimeo, Dailymotion, Twitch
-- **Educational**: Coursera, Udemy, Khan Academy, edX
-- **News**: BBC, CNN, NBC, PBS
-- **And 1000+ more!**
-
-## 📝 Output Format
-
-For each video, three files are generated in `~/Downloads/video-transcripts/`:
-
-```
-video-id-title.txt   # Plain text transcript
-video-id-title.json  # JSON with metadata and timestamps
-video-id-title.md    # Markdown with video info
-```
-
-### Example Output
-
-```markdown
-# How to Build Fast Software
-
-**Video:** https://www.youtube.com/watch?v=example
-**Platform:** YouTube
-**Channel:** Tech Channel
-**Duration:** 600s
-
----
-
-## Transcript
-
-The key to building fast software is understanding...
-
----
-
-*Transcribed using whisper.cpp (Rust) - Model: base*
-```
-
-## 🔧 Configuration
-
-### Environment Variables
-
-```bash
-# Custom models directory
-export WHISPER_MODELS_DIR=~/.local/share/whisper-models
-
-# Custom output directory
-export TRANSCRIPTS_DIR=~/Documents/transcripts
-
-# Log level
-export RUST_LOG=info  # or debug, warn, error
-```
-
-## 🧪 Development
-
-### Build
+## Development
 
 ```bash
 # Debug build
 cargo build
 
-# Release build (optimized)
+# Release build
 cargo build --release
 
 # Run tests
 cargo test
 
-# Run with logging
-RUST_LOG=debug cargo run -- --url "https://youtube.com/watch?v=example"
+# Lint
+cargo clippy -- -D warnings
+
+# Format
+cargo fmt
 ```
 
-### Project Structure
+## License
 
-```
-video-transcriber-mcp/
-├── src/
-│   ├── main.rs              # Entry point
-│   ├── mcp/                 # MCP server implementation
-│   │   ├── server.rs
-│   │   └── types.rs
-│   ├── transcriber/         # Core transcription logic
-│   │   ├── engine.rs        # Main transcription orchestrator
-│   │   ├── whisper.rs       # whisper.cpp integration
-│   │   ├── downloader.rs    # yt-dlp wrapper
-│   │   ├── audio.rs         # Audio processing
-│   │   └── types.rs         # Data structures
-│   └── utils/               # Utilities
-│       └── paths.rs
-├── scripts/                 # Helper scripts
-│   └── download-models.sh   # Download Whisper models
-├── Cargo.toml               # Rust dependencies
-└── README.md
-```
+MIT License - see [LICENSE](LICENSE) for details.
 
-## 🤝 Contributing
-
-Contributions welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) file for details
-
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [whisper.cpp](https://github.com/ggerganov/whisper.cpp) - Fast C++ implementation of Whisper
 - [whisper-rs](https://codeberg.org/tazz4843/whisper-rs) - Rust bindings for whisper.cpp
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - Video downloader for 1000+ platforms
-- [OpenAI Whisper](https://github.com/openai/whisper) - Original speech recognition model
-- [Model Context Protocol SDK](https://github.com/modelcontextprotocol/rust-sdk) - Rust SDK for MCP
-
-## 🆚 Comparison with TypeScript Version
-
-I built the original [video-transcriber-mcp](https://github.com/nhatvu148/video-transcriber-mcp) in TypeScript. Here's why I rewrote it in Rust:
-
-| Aspect | TypeScript Version | **Rust Version** |
-|--------|-------------------|------------------|
-| Transcription Speed | 5 min for 10-min video | **50s (6x faster)** |
-| Memory Usage | ~2 GB | **~800 MB (2.5x less)** |
-| Startup Time | ~2s | **<100ms (20x faster)** |
-| Binary Size | N/A (Node.js runtime) | **~8 MB standalone** |
-| Dependencies | Node.js, Python, whisper | **Just yt-dlp, ffmpeg** |
-| CPU Usage | High (Python overhead) | **Lower (native code)** |
-
-**The Rust version is production-ready and significantly more efficient!**
-
-## 🔗 Links
-
-- [GitHub Repository](https://github.com/nhatvu148/video-transcriber-mcp)
-- [TypeScript Version](https://github.com/nhatvu148/video-transcriber-mcp)
-- [Model Context Protocol](https://modelcontextprotocol.io)
-- [whisper.cpp](https://github.com/ggerganov/whisper.cpp)
-
----
-
-**Built with ❤️ in Rust for maximum performance**
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - Video downloader
+- [Model Context Protocol](https://modelcontextprotocol.io) - MCP specification

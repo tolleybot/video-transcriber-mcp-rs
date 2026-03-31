@@ -1,5 +1,21 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::str::FromStr;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum TranscriptionSource {
+    YouTubeCaptions,
+    WhisperTranscription,
+}
+
+impl fmt::Display for TranscriptionSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TranscriptionSource::YouTubeCaptions => write!(f, "YouTube Captions (direct fetch)"),
+            TranscriptionSource::WhisperTranscription => write!(f, "whisper.cpp (Rust)"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum WhisperModel {
@@ -77,5 +93,6 @@ pub struct TranscriptionResult {
     pub transcript: String,
     pub transcript_preview: String,
     pub word_count: usize,
-    pub model_used: WhisperModel,
+    pub model_used: Option<WhisperModel>,
+    pub source: TranscriptionSource,
 }
