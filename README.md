@@ -40,16 +40,17 @@ Transcribe this local file: /path/to/video.mp4
 ### Prerequisites
 
 - **Rust** 1.85+ (for building from source)
+- **cmake** 3.5+ (required to build whisper.cpp)
 - **yt-dlp** - for downloading videos from non-YouTube platforms, or YouTube videos without captions
 - **ffmpeg** - for audio extraction
 
 ```bash
-# macOS
-brew install yt-dlp ffmpeg
+# macOS (including M1/Apple Silicon)
+brew install cmake yt-dlp ffmpeg
 
 # Linux (Debian/Ubuntu)
+sudo apt install cmake ffmpeg
 pip install yt-dlp
-sudo apt install ffmpeg
 ```
 
 ### Build from Source
