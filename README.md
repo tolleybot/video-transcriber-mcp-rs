@@ -11,7 +11,7 @@ A Model Context Protocol (MCP) server that transcribes videos from **1000+ platf
 - **1000+ platforms** supported via yt-dlp (YouTube, Vimeo, TikTok, Twitter, etc.)
 - **Local video and audio files** supported (mp4, mov, mkv, mp3, wav, m4a, flac, etc.)
 - **5 whisper model sizes** (tiny, base, small, medium, large)
-- **90+ languages** with automatic detection
+- **Multilingual** - 90+ languages with medium/large models, best English results with small+
 - **Multiple output formats** (TXT, JSON, Markdown)
 - **Dual transport** - stdio (local) and Streamable HTTP (remote)
 - **Single binary** - no Python or Node.js required
